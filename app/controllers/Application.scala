@@ -23,10 +23,10 @@ object Application extends Controller {
     database.withSession {
       dal.session = Database.threadLocalSession
       val now = System.currentTimeMillis()
-      val entityHierarchy = (depth match {
+      val entityHierarchy = depth match {
         case Some(x) => entityDal.getEntityHierarchy(rootId, x)
         case None => entityDal.getEntityHierarchy(rootId)
-      }).asHierarchy
+      }
       (System.currentTimeMillis() - now, entityHierarchy)
     }
   }
@@ -47,10 +47,7 @@ object Application extends Controller {
   }
   
   def index = Action {
-    val (elapsed, entityHierarchy) = queryForHierarchy(1)
-    val (hs, count) = hierarchyToString(entityHierarchy)
-
-    Ok("Fetched " + count + " entities in " + elapsed + " ms\n" + hs)
+    Ok(views.html.index("Hello world"))
   }
 
   def hierarchy(rootId:Long, depth:Option[Int]) = Action {
