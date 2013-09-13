@@ -16,8 +16,8 @@ package object models {
         "name" -> JsString(o.name),
         "description" -> JsString(o.description),
         "parentId" -> JsNumber(o.parentId),
-        "depth" -> JsNumber(o.depth),
-        "children" -> Json.toJson(o.getChildren)
+        "hasChildren" -> JsBoolean(o.hasChildren)
+        //"children" -> Json.toJson(o.getChildren)
       ))
     }
   }

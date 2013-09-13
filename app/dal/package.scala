@@ -1,5 +1,7 @@
+import play.api.Logger
 import scala.slick.driver.PostgresDriver
 import scala.slick.session.Session
+import scala.language.implicitConversions
 
 /**
  * @author tjjalava
@@ -13,4 +15,11 @@ package object dal {
   }
 
   object MyPostgresDriver extends MyPostgresDriver
+
+  def withTiming[T](msg:String)(f: => T): T = {
+    val now = System.currentTimeMillis()
+    val ret = f
+    Logger.debug(msg + " - elapsed " + (System.currentTimeMillis() - now) + " ms")
+    ret
+  }
 }

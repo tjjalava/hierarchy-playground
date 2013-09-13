@@ -7,6 +7,7 @@ import scala.slick.jdbc.{StaticQuery => Q, GetResult}
 import Q.interpolation
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
+import play.api.Logger
 
 /**
  * @author tjjalava
@@ -67,23 +68,24 @@ class EntityDal(val driver: ExtendedProfile) {
     implicit val getHierarchyResult = GetResult(r => {
       val e = Entity(Some(r.<<), r.<<, r.<<)
       e.parentId = r.<<
-      e.depth = r.<<
+      e.hasChildren = (r.<<[Int]) > 0
       e
     })
 
-
-
-    sql"""
-      select e."id", e.name, e.description, h.ancestor, max(g.depth) as level
+    withTiming("EntityHierarchy queried") {
+      sql"""
+      select e."id", e.name, e.description, h.ancestor,
+        (select count(f.*) from entity_hierarchy f where f.ancestor = e."id" and f.depth = 1) as child_count
       from entity e
       join entity_hierarchy h on e."id" = h.descendant
-      join entity_hierarchy g on e."id" = g.descendant
       where h.depth = 1 and e."id" in (
-        select descendant from entity_hierarchy where ancestor = $root and depth <= $maxDepth
+        select descendant from entity_hierarchy
+        where (ancestor = $root and depth <= $maxDepth)
+        or (descendant = $root and depth = 0)
       )
-      group by e."id", h.ancestor, h.depth order by level, h.ancestor, e."id"
-    """.as[Entity].list()
-
+      order by h.ancestor, e."id"
+      """.as[Entity].list()
+    }
   }
 }
 

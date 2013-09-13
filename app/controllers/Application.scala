@@ -6,7 +6,6 @@ import play.api.libs.json.Json
 import play.api.Play.current
 import scala.slick.session.Database
 import dal.{MyPostgresDriver, EntityDal}
-import EntityDal.asHierarchy
 import scala.language.implicitConversions
 import models.Entity
 import play.api.libs.concurrent.Akka

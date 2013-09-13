@@ -11,6 +11,7 @@ case class Entity(_id:Option[Long] = None, name:String, description:String = "")
 
   var parentId:Long = _
   var depth:Int = _
+  var hasChildren:Boolean = false
 
   private val children:ListBuffer[Entity] = ListBuffer()
 
