@@ -2,7 +2,7 @@ package controllers
 
 import play.api.mvc._
 import play.api.db._
-import play.api.libs.json.Json
+import play.api.libs.json._
 import play.api.Play.current
 import scala.slick.session.Database
 import dal.{MyPostgresDriver, EntityDal}
@@ -18,9 +18,15 @@ object Application extends Controller {
   lazy val database = Database.forDataSource(DB.getDataSource("hierarchy"))
   val entityDal = new EntityDal(MyPostgresDriver)
 
-  def queryForHierarchy(rootId:Long, depth:Option[Int] = None) = {
+  def withSession[T](f: => T) = {
     database.withSession {
       dal.session = Database.threadLocalSession
+      f
+    }
+  }
+
+  def queryForHierarchy(rootId:Long, depth:Option[Int] = None) = {
+    withSession {
       val now = System.currentTimeMillis()
       val entityHierarchy = depth match {
         case Some(x) => entityDal.getEntityHierarchy(rootId, x)
@@ -69,5 +75,35 @@ object Application extends Controller {
       promise.map(f => Ok(Json.toJson(f)))
     }
   }
-  
+
+  def createNode = Action(parse.json) { request =>
+    request.body.validate[Entity].map {
+      case entity => {
+        withSession {
+          val e = entityDal.addEntity(entity, -1)
+          Created(Json.toJson(entityDal.getEntity(e.id)))
+        }
+      }
+    }.recoverTotal {
+      e => BadRequest("Detected error:" + JsError.toFlatJson(e))
+    }
+  }
+
+  def renameNode(nodeId:Long, name:String) = TODO
+
+  def deleteNode(nodeId:Long) = TODO
+
+  def copyNode(nodeId:Long, targetId:Long) = TODO
+
+  def moveNode(nodeId: Long, targetId: Long) = Action {
+    if (nodeId == targetId)
+      Conflict("Source and target id's can't be the same")
+    else Async {
+      Akka.future {
+        withSession {
+          entityDal.moveNode(nodeId, targetId)
+        }
+      } map(f => NoContent)
+    }
+  }
 }

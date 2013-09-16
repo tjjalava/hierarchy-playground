@@ -16,7 +16,7 @@ package object dal {
 
   object MyPostgresDriver extends MyPostgresDriver
 
-  def withTiming[T](msg:String)(f: => T): T = {
+  def withTiming[T](msg: => String)(f: => T): T = {
     val now = System.currentTimeMillis()
     val ret = f
     Logger.debug(msg + " - elapsed " + (System.currentTimeMillis() - now) + " ms")
