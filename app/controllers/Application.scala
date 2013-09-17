@@ -76,22 +76,45 @@ object Application extends Controller {
     }
   }
 
-  def createNode = Action(parse.json) { request =>
+  def createRootNode = createNode(-1)
+
+  def createNode(parentNode:Long) = Action(parse.json) { request =>
     request.body.validate[Entity].map {
-      case entity => {
-        withSession {
-          val e = entityDal.addEntity(entity, -1)
-          Created(Json.toJson(entityDal.getEntity(e.id)))
-        }
+      case entity => Async {
+        Akka.future {
+          withSession {
+            entityDal.getEntity(entityDal.addEntity(entity, parentNode).id)
+          }
+        } map(e => Created(Json.toJson(e)))
       }
     }.recoverTotal {
       e => BadRequest("Detected error:" + JsError.toFlatJson(e))
     }
   }
 
-  def renameNode(nodeId:Long, name:String) = TODO
+  def updateNode(nodeId:Long) = Action(parse.json) { request =>
+    request.body.validate[Entity].map {
+      case entity => Async {
+        Akka.future {
+          withSession {
+            entityDal.updateEntity(nodeId, entity)
+          }
+        } map(e => Accepted)
+      }
+    }.recoverTotal {
+      e => BadRequest("Detected error:" + JsError.toFlatJson(e))
+    }
+  }
 
-  def deleteNode(nodeId:Long) = TODO
+  def deleteNode(nodeId:Long) = Action {
+    Async {
+      Akka.future {
+        withSession {
+          entityDal.deleteEntity(nodeId)
+        }
+      } map(e => Accepted)
+    }
+  }
 
   def copyNode(nodeId:Long, targetId:Long) = TODO
 

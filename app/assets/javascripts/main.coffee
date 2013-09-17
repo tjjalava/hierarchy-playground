@@ -2,9 +2,9 @@ $ ->
   treeContainer = $("#tree-container")
 
   $("#fetch-tree").click ->
-    rootId = parseInt($("#root-id").val(), 10)
+    rootId = parseInt($("#root-id").val(), 10) or -1
 
-    if !isNaN(rootId) and rootId >= 0
+    if !isNaN(rootId)
       levels = parseInt($("#levels").val(), 10)
       levels = 2 if isNaN(levels) or levels <= 0
       rootList = []
@@ -13,16 +13,17 @@ $ ->
 
       dataFn = (entity) ->
         entity.data = entity.name
-        entity.attr = { "id": "id" + entity.id }
-        entity.metadata = { "id": entity.id }
+        entity.attr = "id": "id" + entity.id
+        entity.metadata = "id": entity.id
         entity.state = "closed" if entity.hasChildren
+        entity.parentId = -1 if entity.parentId == entity.id
         if (parent = entityMap[entity.parentId])?
           (parent.children ?= []).push(entity)
         else
           rootList.push(entity)
         entityMap[entity.id] = entity
 
-
+      treeContainer.jstree("destroy").html("")
       treeContainer
         .on
           "move_node.jstree": (e, d) ->
@@ -33,29 +34,63 @@ $ ->
             nodeId = d.rslt.o.data("id")
             targetId = d.rslt.cr.data?("id") or -1
             console.log "move_node " + nodeId + " to " + targetId
-            $.post("json/" + nodeId + "/move/" + targetId)
+            $.ajax("json/" + nodeId + "/move/" + targetId, type: "PUT")
               .done ->
                 console.log "Move finished"
               .fail ->
-                alert("Fail")
+                $.jstree.rollback(d.rlbk)
 
-          "create.jstree": (e,d) ->
+          "create.jstree": (e, d) ->
             console.log "create"
+            name = d.rslt.name
+            parentId = d.rslt.parent.data?("id") or -1
+            url = "json"
+            if parentId >= 0 then url += "/" + parentId
             $.ajax(
-              "json",
+              url,
               contentType: "application/json"
               type: "POST"
               data: JSON.stringify(
-                name: "New name"
-                description: "Desc"
+                name: name
+                description: ""
               )
             )
+            .done (data) ->
+              console.log "Create succesful"
+              dataFn(data)
+              $(d.rslt.obj).attr("id", "id" + data.id).data(id: data.id)
+            .fail () ->
+                $.jstree.rollback(d.rlbk)
+
 
           "rename.jstree": (e,d) ->
             console.log "rename"
+            name = d.rslt.new_name
+            id = $(d.rslt.obj).data("id")
+            $.ajax("json/" + id,
+              contentType: "application/json"
+              type: "PUT"
+              data: JSON.stringify(
+                name: name
+                description: entityMap[id].description
+              )
+            )
+              .done ->
+                console.log "rename succesful"
+              .fail ->
+                console.log "rename failed"
+                $.jstree.rollback(d.rlbk)
 
-          "delete.jstree": (e,d) ->
+          "remove.jstree": (e,d) ->
             console.log "delete"
+            $.ajax("json/" + $(d.rslt.obj).data("id"),
+              type: "DELETE"
+            )
+              .done ->
+                console.log "delete succesful"
+              .fail ->
+                console.log "delete failed"
+                $.jstree.rollback(d.rlbk)
 
           "copy.jstree": (e,d) ->
             console.log "copy"
@@ -67,7 +102,6 @@ $ ->
           "paste.jstree": (e,d) ->
             console.log "paste"
 
-      treeContainer.jstree("destroy").html("")
       treeContainer.jstree {
 
         "crrm":

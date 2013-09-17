@@ -22,6 +22,7 @@ class EntityDal(val driver: ExtendedProfile) {
     def description = column[String]("DESCRIPTION")
     def * = _id.? ~ name ~ description <> ({ (i,n,d) => Entity(i, n, d) }, { e:Entity => Some((e._id, e.name, e.description))})
     def autoInc = name ~ description <> ({ (n,d) => Entity(None, n, d) }, { e:Entity => Some((e.name, e.description))}) returning _id
+    def update = name ~ description <> ({ (n,d) => Entity(None, n, d) }, { e:Entity => Some((e.name, e.description))})
   }
 
   object EntityHierarchy extends Table[(Long, Long, Int)]("ENTITY_HIERARCHY") {
@@ -41,20 +42,20 @@ class EntityDal(val driver: ExtendedProfile) {
   def drop(implicit session: Session) = ddl.drop
 
   def addEntity(entity: Entity, parentId:Long = -1) = {
-    session.withTransaction {
-      val newId = Entities.autoInc insert entity
-      EntityHierarchy.insert((newId, newId, 0))
+    withTiming("Adding entity") {
+      session.withTransaction {
+        val newId = Entities.autoInc insert entity
+        EntityHierarchy.insert((newId, newId, 0))
 
-      if (parentId > 0) {
         sqlu"""
-          insert into ENTITY_HIERARCHY
-          select p.ANCESTOR, c.DESCENDANT, p.DEPTH+c.DEPTH+1
-          from ENTITY_HIERARCHY p, ENTITY_HIERARCHY c
-          where p.DESCENDANT = $parentId and c.ANCESTOR = $newId
-          """.execute()
-      }
+        insert into ENTITY_HIERARCHY
+        select p.ANCESTOR, c.DESCENDANT, p.DEPTH+c.DEPTH+1
+        from ENTITY_HIERARCHY p, ENTITY_HIERARCHY c
+        where p.DESCENDANT = $parentId and c.ANCESTOR = $newId
+       """.execute()
 
-      Entity(Some(newId), entity.name, entity.description)
+        Entity(Some(newId), entity.name, entity.description)
+      }
     }
   }
 
@@ -85,6 +86,28 @@ class EntityDal(val driver: ExtendedProfile) {
       order by h.ancestor, e."id"
       """.as[Entity].list()
     }
+  }
+
+  def updateEntity(nodeId:Long, entity:Entity) {
+    withTiming("Update entity") {
+      session.withTransaction {
+        val f = for { e <- Entities if e._id === nodeId } yield e.update
+        f.update(entity)
+      }
+    }
+  }
+
+  def deleteEntity(nodeId:Long) {
+    withTiming("Delete entity") {
+      session.withTransaction {
+        val toDelete = sql"""select descendant from entity_hierarchy where ancestor = $nodeId""".as[Long].list()
+
+        sqlu"""delete from entity_hierarchy where descendant in ($toDelete)""".execute()
+
+        sqlu"""delete from entity where "id" in ($toDelete)""".execute()
+      }
+    }
+
   }
 
   def moveNode(nodeId:Long, targetId:Long) {

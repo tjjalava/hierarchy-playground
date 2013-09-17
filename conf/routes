@@ -3,12 +3,15 @@
 # ~~~~
 
 # Home page
-GET        /                                   controllers.Application.index
-GET        /:rootId                            controllers.Application.hierarchy(rootId:Long, depth:Option[Int] ?= None)
-GET        /json/:rootId                       controllers.Application.hierarchyJSON(rootId:Long, depth:Option[Int] ?= None)
-POST       /json                               controllers.Application.createNode()
-PUT        /json/:nodeId/move/:targetId        controllers.Application.moveNode(nodeId:Long, targetId:Long)
+GET         /                                   controllers.Application.index
+GET         /:rootId                            controllers.Application.hierarchy(rootId:Long, depth:Option[Int] ?= None)
+GET         /json/:rootId                       controllers.Application.hierarchyJSON(rootId:Long, depth:Option[Int] ?= None)
+POST        /json                               controllers.Application.createRootNode()
+POST        /json/:parentNode                   controllers.Application.createNode(parentNode:Long)
+PUT         /json/:nodeId/move/:targetId        controllers.Application.moveNode(nodeId:Long, targetId:Long)
+PUT         /json/:nodeId                       controllers.Application.updateNode(nodeId:Long)
+DELETE      /json/:nodeId                       controllers.Application.deleteNode(nodeId:Long)
 
 
 # Map static resources from the /public folder to the /assets URL path
-GET        /assets/*file                       controllers.Assets.at(path="/public", file)
+GET         /assets/*file                       controllers.Assets.at(path="/public", file)
