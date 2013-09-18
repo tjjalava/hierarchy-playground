@@ -1,6 +1,17 @@
 $ ->
   treeContainer = $("#tree-container")
 
+  statusLogger = (->
+    _start = 0
+    start: ->
+      _start = new Date().getTime()
+    log: (msg) ->
+      $("#status").html((msg or "") + " - " + (new Date().getTime() - _start) + " ms")
+  )()
+
+  $("#create-new").click ->
+    treeContainer.jstree("create", -1)
+
   $("#fetch-tree").click ->
     rootId = parseInt($("#root-id").val(), 10) or -1
 
@@ -34,11 +45,14 @@ $ ->
             nodeId = d.rslt.o.data("id")
             targetId = d.rslt.cr.data?("id") or -1
             console.log "move_node " + nodeId + " to " + targetId
+            statusLogger.start()
             $.ajax("json/" + nodeId + "/move/" + targetId, type: "PUT")
               .done ->
                 console.log "Move finished"
               .fail ->
                 $.jstree.rollback(d.rlbk)
+              .always ->
+                statusLogger.log("Move node")
 
           "create.jstree": (e, d) ->
             console.log "create"
@@ -46,6 +60,7 @@ $ ->
             parentId = d.rslt.parent.data?("id") or -1
             url = "json"
             if parentId >= 0 then url += "/" + parentId
+            statusLogger.start()
             $.ajax(
               url,
               contentType: "application/json"
@@ -61,12 +76,15 @@ $ ->
               $(d.rslt.obj).attr("id", "id" + data.id).data(id: data.id)
             .fail () ->
                 $.jstree.rollback(d.rlbk)
+            .always ->
+                statusLogger.log("Create node")
 
 
           "rename.jstree": (e,d) ->
             console.log "rename"
             name = d.rslt.new_name
             id = $(d.rslt.obj).data("id")
+            statusLogger.start()
             $.ajax("json/" + id,
               contentType: "application/json"
               type: "PUT"
@@ -80,9 +98,12 @@ $ ->
               .fail ->
                 console.log "rename failed"
                 $.jstree.rollback(d.rlbk)
+              .always ->
+                statusLogger.log("Rename node")
 
           "remove.jstree": (e,d) ->
             console.log "delete"
+            statusLogger.start()
             $.ajax("json/" + $(d.rslt.obj).data("id"),
               type: "DELETE"
             )
@@ -91,6 +112,8 @@ $ ->
               .fail ->
                 console.log "delete failed"
                 $.jstree.rollback(d.rlbk)
+              .always ->
+                statusLogger.log("Delete node")
 
           "copy.jstree": (e,d) ->
             console.log "copy"
@@ -107,14 +130,13 @@ $ ->
         "crrm":
           "move":
             "check_move": (m) ->
-              ok = !m.cy and m.cr != -1
-              console.log "Ok? " + ok
-              ok
+              !m.cy and m.cr != -1
 
         "json_data":
           "progressive_render": true
           "ajax":
             "data": ->
+              statusLogger.start()
               depth: levels
 
             "url": (node) ->
@@ -124,8 +146,8 @@ $ ->
 
             "success": (data) ->
               dataFn(entity) for entity in data when entity.id isnt queryRoot
+              statusLogger.log("Node loaded")
               if queryRoot == -1 then rootList else entityMap[queryRoot].children
-
 
         "plugins": ["themes", "ui", "json_data", "crrm", "dnd", "contextmenu" ]
       }

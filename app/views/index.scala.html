@@ -2,13 +2,20 @@
 
 @main(message) {
 
-    <label>
-        Root ID: <input type="text" id="root-id"/>
-    </label>
-    <label>
-        Levels: <input type="text" id="levels" value="2"/>
-    </label>
-    <button id="fetch-tree">Fetch</button>
+    <div>
+        <label>
+            Root ID: <input type="text" id="root-id"/>
+        </label>
+        <label>
+            Levels: <input type="text" id="levels" value="2"/>
+        </label>
+        <button id="fetch-tree">Fetch</button>
+    </div>
+    <div>
+        <button id="create-new">Create new root-level node</button>
+    </div>
+
+    <div id="status"></div>
     <div id="tree-container"></div>
     
 }

@@ -100,11 +100,9 @@ class EntityDal(val driver: ExtendedProfile) {
   def deleteEntity(nodeId:Long) {
     withTiming("Delete entity") {
       session.withTransaction {
-        val toDelete = sql"""select descendant from entity_hierarchy where ancestor = $nodeId""".as[Long].list()
-
-        sqlu"""delete from entity_hierarchy where descendant in ($toDelete)""".execute()
-
-        sqlu"""delete from entity where "id" in ($toDelete)""".execute()
+        val toDelete = (for { e <- EntityHierarchy if e.ancestor === nodeId} yield e.descendant).list()
+        (EntityHierarchy where (_.descendant inSet toDelete)).delete
+        (Entities where (_._id inSet toDelete)).delete
       }
     }
 
