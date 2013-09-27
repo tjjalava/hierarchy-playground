@@ -5,18 +5,22 @@ import play.api.db._
 import play.api.libs.json._
 import play.api.Play.current
 import scala.slick.session.Database
-import dal.{MyPostgresDriver, EntityDal}
+import dal.{ClosureTableEntityDalComponent, MyPostgresDriver}
 import scala.language.implicitConversions
 import models.Entity
 import play.api.libs.concurrent.Akka
 import scala.concurrent.ExecutionContext
 import ExecutionContext.Implicits.global
+import service.EntityServiceComponentImpl
 
 
 object Application extends Controller {
 
   lazy val database = Database.forDataSource(DB.getDataSource("hierarchy"))
-  val entityDal = new EntityDal(MyPostgresDriver)
+  val entityDalComponent = new EntityServiceComponentImpl with ClosureTableEntityDalComponent {
+    val driver = MyPostgresDriver
+  }
+  val entityDal = entityDalComponent.entityDal
 
   def withSession[T](f: => T) = {
     database.withSession {
