@@ -1,6 +1,9 @@
 $ ->
   treeContainer = $("#tree-container")
 
+  $.ajaxPrefilter (options, origOptions, jqxhr) ->
+    jqxhr.setRequestHeader("X-BACKEND", $("#backend option:selected").val())
+
   statusLogger = (->
     _start = 0
     start: ->

@@ -5,22 +5,20 @@ import play.api.db._
 import play.api.libs.json._
 import play.api.Play.current
 import scala.slick.session.Database
-import dal.{ClosureTableEntityDalComponent, MyPostgresDriver}
+import dal.{GraphDbEntityDalComponent, EntityDal, ClosureTableEntityDalComponent, MyPostgresDriver}
 import scala.language.implicitConversions
 import models.Entity
-import play.api.libs.concurrent.Akka
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Future, ExecutionContext}
 import ExecutionContext.Implicits.global
 import service.EntityServiceComponentImpl
+import scala.util.DynamicVariable
+import play.Logger
+import play.api.Play
 
 
 object Application extends Controller {
 
   lazy val database = Database.forDataSource(DB.getDataSource("hierarchy"))
-  val entityDalComponent = new EntityServiceComponentImpl with ClosureTableEntityDalComponent {
-    val driver = MyPostgresDriver
-  }
-  val entityDal = entityDalComponent.entityDal
 
   def withSession[T](f: => T) = {
     database.withSession {
@@ -29,108 +27,114 @@ object Application extends Controller {
     }
   }
 
-  def queryForHierarchy(rootId:Long, depth:Option[Int] = None) = {
-    withSession {
-      val now = System.currentTimeMillis()
-      val entityHierarchy = depth match {
-        case Some(x) => entityDal.getEntityHierarchy(rootId, x)
-        case None => entityDal.getEntityHierarchy(rootId)
-      }
-      (System.currentTimeMillis() - now, entityHierarchy)
-    }
+  def withBackend[T](f:EntityDal => T) = {
+    f(DalChoiceAction.backend.value)
   }
 
-  def hierarchyToString(eh:List[Entity]) = {
-    val buf = new StringBuilder
-    var count = 0
-
-    def p(e:Entity) {
-      count += 1
-      val indent = (for (i <- 0 until e.depth) yield "  ").foldLeft("")(_ + _)
-      buf ++= indent + e.id + ": " + e.name + "  " + e.parentId + "  " + e.depth + "\n"
-      e.getChildren.foreach(p)
-    }
-
-    eh.foreach(p)
-    (buf.toString(), count)
-  }
-  
   def index = Action {
     Ok(views.html.index("Hello world"))
   }
 
-  def hierarchy(rootId:Long, depth:Option[Int]) = Action {
-    val promise = Akka.future {
-      val (elapsed, entityHierarchy) = queryForHierarchy(rootId, depth)
-      val (hs, count) = hierarchyToString(entityHierarchy)
-      (elapsed, hs, count)
-    }
-    Async {
-      promise.map(f => Ok("Fetched " + f._3 + " entities in " + f._1 + " ms\n" + f._2))
-    }
-  }
-
-  def hierarchyJSON(rootId:Long, depth:Option[Int]) = Action {
-    val promise = Akka.future {
-      val (_, entityHierarchy) = queryForHierarchy(rootId, depth)
-      entityHierarchy
-    }
-    Async {
-      promise.map(f => Ok(Json.toJson(f)))
+  def hierarchyJSON(rootId:Long, depth:Option[Int]) = DalChoiceAction.async {
+    withBackend { entityDal =>
+      Future {
+        withSession {
+          val entityHierarchy = depth match {
+            case Some(x) => entityDal.getEntityHierarchy(rootId, x)
+            case None => entityDal.getEntityHierarchy(rootId)
+          }
+          Ok(Json.toJson(entityHierarchy))
+        }
+      }
     }
   }
 
   def createRootNode = createNode(-1)
 
-  def createNode(parentNode:Long) = Action(parse.json) { request =>
-    request.body.validate[Entity].map {
-      case entity => Async {
-        Akka.future {
-          withSession {
-            entityDal.getEntity(entityDal.addEntity(entity, parentNode).id)
+  def createNode(parentNode:Long) = DalChoiceAction.async(parse.json) { request =>
+    withBackend { entityDal =>
+      Future {
+        request.body.validate[Entity].map {
+          case entity => withSession {
+            Created(Json.toJson(entityDal.getEntity(entityDal.addEntity(entity, parentNode).id)))
           }
-        } map(e => Created(Json.toJson(e)))
+        }.recoverTotal {
+          e => BadRequest("Detected error:" + JsError.toFlatJson(e))
+        }
       }
-    }.recoverTotal {
-      e => BadRequest("Detected error:" + JsError.toFlatJson(e))
     }
   }
 
-  def updateNode(nodeId:Long) = Action(parse.json) { request =>
-    request.body.validate[Entity].map {
-      case entity => Async {
-        Akka.future {
-          withSession {
+  def updateNode(nodeId:Long) = DalChoiceAction.async(parse.json) { request =>
+    withBackend { entityDal =>
+      Future {
+        request.body.validate[Entity].map {
+          case entity => withSession {
             entityDal.updateEntity(nodeId, entity)
+            Accepted
           }
-        } map(e => Accepted)
+        }.recoverTotal {
+          e => BadRequest("Detected error:" + JsError.toFlatJson(e))
+        }
       }
-    }.recoverTotal {
-      e => BadRequest("Detected error:" + JsError.toFlatJson(e))
     }
   }
 
-  def deleteNode(nodeId:Long) = Action {
-    Async {
-      Akka.future {
+  def deleteNode(nodeId:Long) = DalChoiceAction.async {
+    withBackend { entityDal =>
+      Future {
         withSession {
           entityDal.deleteEntity(nodeId)
+          Accepted
         }
-      } map(e => Accepted)
+      }
     }
   }
 
   def copyNode(nodeId:Long, targetId:Long) = TODO
 
-  def moveNode(nodeId: Long, targetId: Long) = Action {
-    if (nodeId == targetId)
-      Conflict("Source and target id's can't be the same")
-    else Async {
-      Akka.future {
-        withSession {
+  def moveNode(nodeId: Long, targetId: Long) = DalChoiceAction.async {
+    withBackend { entityDal =>
+      Future {
+        if (nodeId == targetId)
+          Conflict("Source and target id's can't be the same")
+        else withSession {
           entityDal.moveNode(nodeId, targetId)
+          NoContent
         }
-      } map(f => NoContent)
+      }
     }
+  }
+}
+
+object DalChoiceAction extends ActionBuilder[Request] {
+
+  private lazy val closureBackend = new EntityServiceComponentImpl with ClosureTableEntityDalComponent {
+    val driver = MyPostgresDriver
+  }.entityDal
+
+  private lazy val graphDbBackend = new EntityServiceComponentImpl with GraphDbEntityDalComponent {
+    val dbDir: String = Play.current.configuration.getString("neo4j.embedded.dir").get
+  }.entityDal
+
+  val backend = new DynamicVariable[EntityDal](null)
+
+  protected def invokeBlock[A](request: Request[A], block: (Request[A]) => Future[SimpleResult]): Future[SimpleResult] = {
+    request.headers.get("X-BACKEND") match {
+      case Some("SQL") => {
+        Logger.debug("Backend: Closure Tables")
+        backend.value = closureBackend
+      }
+      case Some("GRAPH") => {
+        Logger.debug("Backend: GraphDb")
+        backend.value = graphDbBackend
+      }
+      case _ => {
+        Logger.debug("Backend (default): Closure Tables")
+        backend.value = closureBackend
+      }
+    }
+
+    block(request)
   }
 }

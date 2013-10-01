@@ -4,7 +4,6 @@
 
 # Home page
 GET         /                                   controllers.Application.index
-GET         /:rootId                            controllers.Application.hierarchy(rootId:Long, depth:Option[Int] ?= None)
 GET         /json/:rootId                       controllers.Application.hierarchyJSON(rootId:Long, depth:Option[Int] ?= None)
 POST        /json                               controllers.Application.createRootNode()
 POST        /json/:parentNode                   controllers.Application.createNode(parentNode:Long)
