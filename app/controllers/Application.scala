@@ -13,7 +13,7 @@ import ExecutionContext.Implicits.global
 import service.EntityServiceComponentImpl
 import scala.util.DynamicVariable
 import play.Logger
-import play.api.Play
+import play.api.{Routes, Play}
 
 
 object Application extends Controller {
@@ -35,7 +35,7 @@ object Application extends Controller {
     Ok(views.html.index("Hello world"))
   }
 
-  def hierarchyJSON(rootId:Long, depth:Option[Int]) = DalChoiceAction.async {
+  def getHierarchy(rootId:Long, depth:Option[Int]) = DalChoiceAction.async {
     withBackend { entityDal =>
       Future {
         withSession {
@@ -47,6 +47,15 @@ object Application extends Controller {
         }
       }
     }
+  }
+
+  def javascriptRoutes = Action { implicit request =>
+    import routes.javascript.{Application => A}
+    Ok(
+      Routes.javascriptRouter("jsRoutes")(
+        A.createRootNode, A.createNode, A.updateNode,
+        A.deleteNode, A.moveNode, A.getHierarchy)
+    )
   }
 
   def createRootNode = createNode(-1)

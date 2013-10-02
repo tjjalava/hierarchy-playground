@@ -1,5 +1,6 @@
 $ ->
   treeContainer = $("#tree-container")
+  js = jsRoutes.controllers.Application
 
   $.ajaxPrefilter (options, origOptions, jqxhr) ->
     jqxhr.setRequestHeader("X-BACKEND", $("#backend option:selected").val())
@@ -49,7 +50,7 @@ $ ->
             targetId = d.rslt.cr.data?("id") or -1
             console.log "move_node " + nodeId + " to " + targetId
             statusLogger.start()
-            $.ajax("json/" + nodeId + "/move/" + targetId, type: "PUT")
+            js.moveNode(nodeId, targetId).ajax()
               .done ->
                 console.log "Move finished"
               .fail ->
@@ -61,13 +62,10 @@ $ ->
             console.log "create"
             name = d.rslt.name
             parentId = d.rslt.parent.data?("id") or -1
-            url = "json"
-            if parentId >= 0 then url += "/" + parentId
+            fn = if parentId >= 0 then js.createNode(parentId) else js.createRootNode()
             statusLogger.start()
-            $.ajax(
-              url,
+            fn.ajax(
               contentType: "application/json"
-              type: "POST"
               data: JSON.stringify(
                 name: name
                 description: ""
@@ -88,9 +86,8 @@ $ ->
             name = d.rslt.new_name
             id = $(d.rslt.obj).data("id")
             statusLogger.start()
-            $.ajax("json/" + id,
+            js.updateNode(id).ajax(
               contentType: "application/json"
-              type: "PUT"
               data: JSON.stringify(
                 name: name
                 description: entityMap[id].description
@@ -107,9 +104,7 @@ $ ->
           "remove.jstree": (e,d) ->
             console.log "delete"
             statusLogger.start()
-            $.ajax("json/" + $(d.rslt.obj).data("id"),
-              type: "DELETE"
-            )
+            js.deleteNode($(d.rslt.obj).data("id")).ajax()
               .done ->
                 console.log "delete succesful"
               .fail ->
@@ -138,14 +133,11 @@ $ ->
         "json_data":
           "progressive_render": true
           "ajax":
-            "data": ->
-              statusLogger.start()
-              depth: levels
-
             "url": (node) ->
               id = if node == -1 then rootId else parseInt(node.data("id"), 10)
               queryRoot = id unless id == rootId
-              "json/" + id
+              statusLogger.start()
+              js.getHierarchy(id, levels).absoluteURL()
 
             "success": (data) ->
               dataFn(entity) for entity in data when entity.id isnt queryRoot
